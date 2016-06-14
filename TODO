@@ -1,0 +1,3 @@
+Remove trailing / from argument paths
+validate paths and make sure that striping path is not same as mount path since it results in infinite loop
+

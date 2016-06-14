@@ -1,0 +1,1 @@
+USAGE : ruby stripefs.rb /tmp/fuse -s /home/mrinal/clmnt/1 -s /home/mrinal/clmnt/2 -s /home/mrinal/clmnt/3 -c 1024
