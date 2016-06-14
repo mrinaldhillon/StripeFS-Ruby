@@ -108,7 +108,12 @@ module StripeFS
 			end
 			return ::RFuse::Stat.new(type, stat.mode, values)
 		end
-		
+
+		# XXX if it works without ffi	
+		def fgetattr(ctx, path, ffi)
+			getattr(ctx, path)
+		end
+
 		def readdir(ctx, path, filler, offset, ffi)
 			striped_paths = getstriped_paths(path)
 			
@@ -128,6 +133,19 @@ module StripeFS
 		def rmdir(ctx, path)
 			striped_paths = getstriped_paths(path)
 			striped_paths.each { |stripe| stripe.rmdir }
+		end
+
+		def chmod(ctx, path, mode)
+			getstriped_paths(path).each { |stripe| stripe.chmod(mode) }
+		end
+		
+		def chown(ctx, path, uid, gid)
+			getstriped_paths(path).each { |stripe| stripe.chown(uid, gid) }
+		end
+		
+		def rename(ctx, from, to)
+			striped_topaths = getstriped_paths(to)
+			getstriped_paths(from).each_with_index { |stripe, index| stripe.rename(striped_topaths[index].to_s) }
 		end
 
 	end
