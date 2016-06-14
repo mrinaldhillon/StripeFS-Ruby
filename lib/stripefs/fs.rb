@@ -73,22 +73,28 @@ module StripeFS
 			return ::RFuse::Stat::S_IFMT
 			end
 		end
-
+		# split path i.e. /1/2/3 => /1.0/2.0/3.0
 		def getstriped_paths(path)
-			striped_paths = []
-			pathname = ::Pathname.new(path)
-			return striped_paths << @root.dup if pathname.root?
+			striped_paths = @stripes.dup
+			return striped_paths if path == "/"
 			
-			basename = pathname.basename
-			@stripes.each_with_index do |stripe, index|
-				striped_paths[index] = stripe + "#{basename}.#{index+1}"
+			pathname = ::Pathname.new(path)
+			pathname.each_filename do |filename|
+				striped_paths.each_with_index do |stripe, index| 
+					striped_paths[index] = striped_paths[index] + "#{filename}.#{index+1}"
+				end
 			end
 			striped_paths
 		end
 
 		def getattr(ctx, path)
-			striped_paths = getstriped_paths(path)
-			stat = lstat(striped_paths[0])
+			if path == "/"
+				stat = @rootstat.dup
+			else
+				striped_paths = getstriped_paths(path)
+				stat = striped_paths[0].lstat
+			end
+
 			values = {:uid => @uid, :gid => @gid, :size => stat.size,
 				:atime => stat.atime, :mtime => stat.mtime, :ctime => stat.ctime, :dev => stat.dev, :ino => stat.ino, 
 				:nlink => stat.nlink, :rdev => stat.rdev, :blksize => stat.blksize, :blocks => stat.blocks}
@@ -103,5 +109,26 @@ module StripeFS
 			return ::RFuse::Stat.new(type, stat.mode, values)
 		end
 		
+		def readdir(ctx, path, filler, offset, ffi)
+			striped_paths = getstriped_paths(path)
+			
+			 filler.push(".",nil,0)
+			 filler.push("..",nil,0)
+
+			 striped_paths[0].each_child(false) do |child|
+			 	filler.push(child.to_s.chomp(".1"), nil, 0)
+			end
+		end	 	
+
+		def mkdir(ctx, path, mode)
+			striped_paths = getstriped_paths(path)
+			striped_paths.each { |stripe| stripe.mkdir(mode) }
+		end
+
+		def rmdir(ctx, path)
+			striped_paths = getstriped_paths(path)
+			striped_paths.each { |stripe| stripe.rmdir }
+		end
+
 	end
 end
