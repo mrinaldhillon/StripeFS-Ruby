@@ -2,10 +2,10 @@ require 'rfuse'
 require 'pathname'
 require_relative 'utils'
 require "stringio"
+require "fileutils"
 module StripeFS
 	class FS
 		attr_reader :chunksize, :stripes, :root, :rootstat
-		
 			
 		def initialize(mountpath, stripes, chunksize)
 			raise ArgumentError if Utils.is_blank?(stripes) || Utils.is_blank?(mountpath)
@@ -73,7 +73,8 @@ module StripeFS
 			return ::RFuse::Stat::S_IFMT
 			end
 		end
-		# split path i.e. /1/2/3 => /1.0/2.0/3.0
+		
+		# stripe path i.e. /1/2/3 => /1.1/2.1/3.1
 		def getstriped_paths(path)
 			striped_paths = @stripes.dup
 			return striped_paths if path == "/"
@@ -109,7 +110,6 @@ module StripeFS
 			return ::RFuse::Stat.new(type, stat.mode, values)
 		end
 
-		# XXX if it works without ffi	
 		def fgetattr(ctx, path, ffi)
 			getattr(ctx, path)
 		end
@@ -160,9 +160,9 @@ module StripeFS
 			getstriped_paths(path).each do |stripe| 
 				puts stripe
 				stripe.open("a+") do |f| 
-				f.chmod(mode)
-				puts f.path
-			end #open and close the file by calling open with block
+					f.chmod(mode)
+					puts f.path
+				end #open and close the file by calling open with block
 			end
 		end
 
@@ -170,27 +170,27 @@ module StripeFS
 
 Also
 		
-		1.Find which split to begin writing
+		1.Find which stripe to begin writing
 	Begin
 		2. Find Offset in Split to write at.
 		3. Calculate size to write based on chunk boundary
-			4. If chunk boundary overflows than continue to next split and repeat at step 2..4
+			4. If chunk boundary overflows than continue to next stripe and repeat at step 2..4
 	end
 1.
 	chunk_num_at_offset = offset/chunksize # find number of chunks till offset  
-	write_at_split_num = chunknum_at_offset % split_count
+	write_at_stripe_num = chunknum_at_offset % stripe_count
 
 
-1. Find out which split to begin writing
+1. Find out which stripe to begin writing
 		ChunknumAtOffset = offset/chunksize #find number chunks till offset in the file
-2. SplitnumAtOffset= ChunknumAtOffset%SplitCount #find which split chunk and offset with lie
-2. Write can be across boundaries of splits
-3. For each split with starting split
-1. Calculate offset in that split to start writing at
+2. SplitnumAtOffset= ChunknumAtOffset%SplitCount #find which stripe chunk and offset with lie
+2. Write can be across boundaries of stripes
+3. For each stripe with starting stripe
+1. Calculate offset in that stripe to start writing at
 1. OffsetInChunk (offset % chunk size) #find location of offset relative a single chunk’s boundary
-2. ChunknumInSplit = ChunknumAtOffset/SplitCount # gives no. chunks till offset in the split
+2. ChunknumInSplit = ChunknumAtOffset/SplitCount # gives no. chunks till offset in the stripe
 3. OffsetInSplit = (ChunknumInSplit*Chunksize) + OffsetInChunk
-2. Calculate Size to write at chunk in split
+2. Calculate Size to write at chunk in stripe
 1. SizeAvailableToWrite = Chunksize - OffsetInChunk
 2. if SizeToWrite > SizeAvailableToWrite
 1. then SizeInChunkAtSplit = SizeAvailableToWrite and SizeToWrite -= SizeInChunkAtSplit
@@ -201,13 +201,13 @@ Also
 
 		def stripe_write(striped_paths, io, offset, chunksize, ffi)
 			stripes_count = striped_paths.count
-			# Find which split to begin writing
+			# Find which stripe to begin writing
 			num_chunks_till_offset_in_file = offset/chunksize
 			num_stripe_at_offset = num_chunks_till_offset_in_file % stripes_count
 
 			size = io.length - io.tell
 
-			# Find offset in split to write at
+			# Find offset in stripe to write at
 			offset_in_chunk_in_stripe = offset % chunksize	#offset relative to a chunk 
 			num_chunk_till_offset_in_stripe = num_chunks_till_offset_in_file / stripes_count
 			offset_in_stripe = (num_chunk_till_offset_in_stripe * chunksize) + offset_in_chunk_in_stripe
@@ -237,7 +237,6 @@ Also
 			puts "Size of Data #{size_of_buffer}"
 			puts "Expected final offset = Offset + Length of buffer = #{offset + size_of_buffer}"
 			return 0 if 0 == io.length
-
 			begin
 				offset_in_file = stripe_write(striped_paths, io, offset_in_file, chunksize, ffi)
 			end while io.tell != size_of_buffer
@@ -250,13 +249,13 @@ Also
 
 		def stripe_read(striped_paths, size, offset, chunksize, read_length, ffi)
 			stripes_count = striped_paths.count
-			# Find which split to begin writing
+			# Find which stripe to begin writing
 			num_chunks_till_offset_in_file = offset/chunksize
 			num_stripe_at_offset = num_chunks_till_offset_in_file % stripes_count
 
 			size -= read_length
 			read_buffer = ""
-			# Find offset in split to write at
+			# Find offset in stripe to write at
 			offset_in_chunk_in_stripe = offset % chunksize	#offset relative to a chunk 
 			num_chunk_till_offset_in_stripe = num_chunks_till_offset_in_file / stripes_count
 			offset_in_stripe = (num_chunk_till_offset_in_stripe * chunksize) + offset_in_chunk_in_stripe
@@ -271,11 +270,9 @@ Also
 				file.seek(offset_in_stripe, 0)
 				read_buffer = file.read(size_to_read_in_stripe)
 				puts "nil read at #{offset_in_stripe} with read of #{size_to_read_in_stripe}" if read_buffer.nil? 
-#read_buffer = "" if read_buffer.nil?
 			end
 			read_buffer
 		end
-
 
 		def read(ctx, path, size, offset, ffi)
 			puts "Read called at #{path} at offset #{offset}, size #{size}"
@@ -305,5 +302,75 @@ Also
 		def unlink(ctx, path)
 			getstriped_paths(path).each { |path| path.unlink }
 		end
+
+		def utimens(ctx, path, atime, mtime)
+			puts "Utime #{atime} #{atime.class} #{mtime}"
+			getstriped_paths(path).each { |path| path.utime(atime/1000000000, mtime/1000000000) }
+		end
+		
+=begin Truncate the file to size offset i.e. truncate it till offset not including
+ Use logic in write and read to find stripe in offset to begin.
+ After find the stripe at offset, find the same for rest of the stripes just once.
+ Truncate each at the calculated offset
+=end
+
+		def truncate(ctx, path, length)
+			striped_paths = getstriped_paths(path)
+			stripes_count = striped_paths.count
+			chunksize = @chunksize
+			remaining_length = 0
+			bytes_to_skip = 0
+			stripe_final_size = []
+
+# Initialize truncate size for each stripe path to multiple of chunk size for complete iteration
+			(0..stripes_count-1).each_with_index do |index|
+				break if length > (chunksize * stripes_count)
+				stripe_final_size[index] = (length / (chunksize * stripes_count)) * chunksize
+			end
+# Calculate final truncate size for last incomplete iteration through stripes
+		remaining_length = length % (chunksize * stripes_count)
+
+			(0..stripes_count-1).each_with_index do |index|
+				break if remaining_length < 0
+				bytes_to_skip = (remaining_length - chunksize) > 0 ? chunksize : remaining_length
+				remaining_length -= bytes_to_skip;
+				stripe_final_size[index] += bytes_to_skip;
+			end
+
+# /stripefs/file --> /stripe1/file.1, /stripe2/file.2, /stripe3/file.3 ....
+			striped_paths.each_with_index do |stripe, index|
+				stripe.truncate(stripe_final_size[index])
+			end
+		end
+
+		def ftruncate(ctx, path, length, ffi)
+			truncate(ctx, path, length)
+		end
+=begin		
+		def link(ctx, from, to)
+			puts "Link #{from}, #{to}"
+			from_striped_paths = getstriped_paths(from)
+			to_striped_paths = getstriped_paths(to)
+
+			from_striped_paths.each_with_index do |stripe, index| 
+				::FileUtils.ln(stripe.to_s, to_striped_paths[index].to_s)
+			end
+		end
+
+		def symlink(ctx, from, to)
+			puts "Symlink #{from}, #{to}"
+			from_striped_paths = getstriped_paths(from)
+			to_striped_paths = getstriped_paths(to)
+
+			from_striped_paths.each_with_index do |stripe, index| 
+				::FileUtils.ln_s(stripe.to_s, to_striped_paths[index].to_s)
+			end
+		end
+
+		def readlink(ctx, path, size)
+			striped_paths = getstriped_paths(path)
+			::File.readlink(striped_paths[0].to_s)
+		end
+=end
 	end
 end
