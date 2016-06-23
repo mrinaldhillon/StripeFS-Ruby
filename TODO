@@ -1,3 +1,8 @@
-Remove trailing / from argument paths
-validate paths and make sure that striping path is not same as mount path since it results in infinite loop
-
+* Remove trailing / from argument paths
+* Validate paths and make sure that striping path is not same as mount path since it results in infinite loop
+* Implement #link, #symlink, #readlink, #getxattr, #setxattr, #listxattr, #access
+* Set ffi.fh for #creat, #open. Use ffi.fh for read, write, ftruncate, fgetattr.
+* Figure if get striped path for directories is necessary?
+* Create files and folder under corresponding stripes excpet for 1st stripes only in case of a write.
+* Figure correct file access permissions.
+* Implement OSX support.
