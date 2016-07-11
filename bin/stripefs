@@ -1,5 +1,9 @@
 #!/usr/bin/env ruby
 
 require_relative '../lib/stripefs'
-
-StripeFS::CMD.mount
+# Command line utility to mount StripeFS FileSystem
+#
+#	@author Mrinal Dhillon
+#	@example
+#		bin/stripefs /mnt/stripefs -s ~/stripes/1 -s ~/stripes/2 -s ~/stripes/3 -c 4096
+StripeFS::CMD.mount(ARGV)

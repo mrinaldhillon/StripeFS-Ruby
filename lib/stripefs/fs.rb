@@ -5,25 +5,27 @@ require "fileutils"
 require_relative "utils"
 
 module StripeFS
-	# Wrapper class for RFuse::Fuse.
+	# Defines RFuse::Fuse file system apis to implement StripeFS
 	#
 	# @author Mrinal Dhillon
-	# Defines RFuse::Fuse file system apis to implement StripeFS
-	# @todo link, symlink, mknod, access, xattr apis
+	# @todo link, symlink, readlink, mknod, access, getxattr, 
+	#	setxattr, listxattr apis
 	class FS
-		# Creates StripeFS::FS instance
+		#	Creates StripeFS::FS instance
 		#
-		# @param mountpath [String] mountpoint for fuse filesystem
-		# @param stripes [Array<String>] stripe paths
-		# @param chunksize [Fixnum] chunksize for stripes
+		#	@param mountpath [String] mountpoint for fuse filesystem
+		#	@param stripes [Array<String>] stripe paths
+		#	@param chunksize [Fixnum] chunksize for stripes
 		# 
 		#	@raise [ArgumentError]
 		def initialize(mountpath, stripes, chunksize)
-			fail ArgumentError, "Invalid Inputs" if Utils.is_blank?(stripes) || Utils.is_blank?(mountpath)
+			fail ArgumentError, "Invalid Inputs" if Utils.is_blank?(stripes) || 
+																					Utils.is_blank?(mountpath)
 			
 			@rootstat = Pathname.new(mountpath).lstat
 			@root = Pathname.new(mountpath)
-			fail ArgumentError, "Mountpoint #{mountpath} is not a directory" unless @root.directory?
+			fail ArgumentError, 
+				"Mountpoint #{mountpath} is not a directory" unless @root.directory?
 			
 			@chunksize = chunksize
 			@uid = Process.uid
@@ -32,9 +34,10 @@ module StripeFS
 			@stripes = []
 			Array(stripes).each_with_index do |stripe, index|
 				@stripes[index] = Pathname.new(stripe)
-				fail ArgumentError, "Stripe target #{stripe} is not a directory" unless @stripes[index].directory?
+				fail ArgumentError, 
+				"Stripe target #{stripe} is not a directory" unless @stripes[index].directory?
 			end
-		end
+		end	#	initialize
 
 		INIT_TIMES = Array.new(3,0)
 		
@@ -45,11 +48,11 @@ module StripeFS
 		def lstat(path)
 			return @rootstat if path.to_s == @root.to_s
 			path.lstat
-		end
+		end	# lstat
 
 		def method_missing(method, *args)
 			$stderr << "#{method} is not implemented"
-		end
+		end	# method_missing
 		
 		# Fuse statfs method. {RFuse::Fuse#statfs}
 		# @param ctx [RFuse::Context]
@@ -71,7 +74,7 @@ module StripeFS
 			s.f_flag     = 0
 			s.f_namemax  = 10000
 			return s
-		end
+		end	# statfs
 
 		# Convert string to RFuse::Stat object type
 		#	@param type [String]
@@ -96,15 +99,17 @@ module StripeFS
 			else
 			return RFuse::Stat::S_IFMT
 			end
-		end
+		end	# typeofstat
 		
 		# Utility function to convert StripeFS path to striped paths
 		#	@param path [String] path to object
 		#
 		# @return [Array<String>] object path on stripes
+		#	@todo write overload with stripe index
 		#	@example
-		#		StripeFS path /1/2/3 for n stripes corresponds to /1.1/2.1/3.1, /1.2/2.2/2.3, ..., /1.n/2.n/3.n 
-		def getstriped_paths(path)
+		#		StripeFS path /1/2/3 for n stripes corresponds to /1.1/2.1/3.1, 
+		#		/1.2/2.2/2.3, ..., /1.n/2.n/3.n 
+		def get_striped_paths(path)
 			striped_paths = @stripes.dup
 			return striped_paths if path == "/"
 			
@@ -116,7 +121,7 @@ module StripeFS
 			end
 			
 			striped_paths
-		end
+		end	# get_striped_paths
 
 		# Fuse getattr method. {RFuse::Fuse#getattr}
 		# @param ctx [RFuse::Context]
@@ -127,40 +132,43 @@ module StripeFS
 			if path == "/"
 				stat = @rootstat.dup
 			else
-				striped_paths = getstriped_paths(path)
+				striped_paths = get_striped_paths(path)
 				stat = striped_paths[0].lstat
 			end
 
 			values = {:uid => @uid, :gid => @gid, :size => stat.size,
-				:atime => stat.atime, :mtime => stat.mtime, :ctime => stat.ctime, :dev => stat.dev, :ino => stat.ino, 
-				:nlink => stat.nlink, :rdev => stat.rdev, :blksize => stat.blksize, :blocks => stat.blocks}
+				:atime => stat.atime, :mtime => stat.mtime, :ctime => stat.ctime, 
+				:dev => stat.dev, :ino => stat.ino, :nlink => stat.nlink, 
+				:rdev => stat.rdev, :blksize => stat.blksize, :blocks => stat.blocks}
 			type = typeofstat(stat.ftype)
-			return RFuse::Stat.new(type, stat.mode, values) if type == RFuse::Stat::S_IFDIR ||
-																														type == RFuse::Stat::S_IFLNK
+			if type == RFuse::Stat::S_IFDIR || type == RFuse::Stat::S_IFLNK
+				return RFuse::Stat.new(type, stat.mode, values) 
+			end
 
 			striped_paths.each_with_index do |stripe, index|
 				next if index == 0
 				values[:size] += stripe.size
 			end
 			return RFuse::Stat.new(type, stat.mode, values)
-		end
+		end	# getattr
 
 		# Fuse getattr method. {RFuse::Fuse#fgetattr}
 		# @param ctx [RFuse::Context]
 		# @param path [String] object path
-		#	@param ffi [RFuse::FileInfo] object to store information of an open file such file handle
+		#	@param ffi [RFuse::FileInfo] object to store information of an 
+		#																open file such file handle
 		# 
 		#	@return [RFuse::Stat] stat info of object
 		def fgetattr(ctx, path, ffi)
 			getattr(ctx, path)
-		end
+		end	#	fgetattr
 
 		# Fuse readdir method to list contents of directory. {RFuse::Fuse#readdir}
 		# @param ctx [RFuse::Context]
 		# @param path [String] object path
 		#	@param filler [RFuse::Filler] structure to collect directory entries
 		def readdir(ctx, path, filler, offset, ffi)
-			striped_paths = getstriped_paths(path)
+			striped_paths = get_striped_paths(path)
 			
 			 filler.push(".",nil,0)
 			 filler.push("..",nil,0)
@@ -168,22 +176,22 @@ module StripeFS
 			 striped_paths[0].each_child(false) do |child|
 			 	filler.push(child.to_s.chomp(".1"), nil, 0)
 			end
-		end	 	
+		end	#	readdir
 
 		# Fuse mkdir method to make directory. {RFuse::Fuse#mkdir}
 		# @param ctx [RFuse::Context]
 		# @param path [String] object path
 		#	@mode mode [Fixnum] to obtain correct directory permissions
 		def mkdir(ctx, path, mode)
-			striped_paths = getstriped_paths(path)
+			striped_paths = get_striped_paths(path)
 			striped_paths.each { |stripe| stripe.mkdir(mode) }
-		end
+		end	#	mkdir
 
 		# Fuse rmdir method to remove empty directory. {RFuse::Fuse#rmdir}
 		# @param ctx [RFuse::Context]
 		# @param path [String] object path
 		def rmdir(ctx, path)
-			striped_paths = getstriped_paths(path)
+			striped_paths = get_striped_paths(path)
 			striped_paths.each { |stripe| stripe.rmdir }
 		end
 		
@@ -192,8 +200,8 @@ module StripeFS
 		# @param path [String] object path
 		#	@mode mode [Fixnum] object permissions
 		def chmod(ctx, path, mode)
-			getstriped_paths(path).each { |stripe| stripe.chmod(mode) }
-		end
+			get_striped_paths(path).each { |stripe| stripe.chmod(mode) }
+		end	#	chmod
 		
 		# Fuse chown method to change object ownenership. {RFuse::Fuse#chown}
 		# @param ctx [RFuse::Context]
@@ -201,27 +209,29 @@ module StripeFS
 		#	@mode uid [Fixnum] user id
 		#	@mode gid [Fixnum] group id
 		def chown(ctx, path, uid, gid)
-			getstriped_paths(path).each { |stripe| stripe.chown(uid, gid) }
-		end
+			get_striped_paths(path).each { |stripe| stripe.chown(uid, gid) }
+		end	#	chown
 		
 		# Fuse rename method to rename object. {RFuse::Fuse#rename}
 		# @param ctx [RFuse::Context]
 		# @param from [String] object path
 		# @param to [String] object path
 		def rename(ctx, from, to)
-			striped_topaths = getstriped_paths(to)
-			getstriped_paths(from).each_with_index { |stripe, index| stripe.rename(striped_topaths[index].to_s) }
-		end
+			striped_topaths = get_striped_paths(to)
+			get_striped_paths(from).each_with_index do |stripe, index| 
+				stripe.rename(striped_topaths[index].to_s)
+			end
+		end	#rename
 		
 		# Fuse open file method. {RFuse::Fuse#open}
 		# @param ctx [RFuse::Context]
 		# @param path [String] object path
 		#	@param ffi [RFuse::FileInfo] stores file information such as file handle
 		def open(ctx, path, ffi)
-			getstriped_paths(path).each do |stripe| 
-				stripe.open(ffi.flags) { |f| } #open and close the file by calling open with block
+			get_striped_paths(path).each do |stripe| 
+				stripe.open(ffi.flags) { |f| } # open and close file
 			end
-		end
+		end	#	open
 
 		# Fuse creat file method. {RFuse::Fuse#creat}
 		# @param ctx [RFuse::Context]
@@ -229,38 +239,47 @@ module StripeFS
 		#	@mode mode [Fixnum] object permissions
 		#	@param ffi [RFuse::FileInfo] stores file information such as file handle
 		def create(ctx, path, mode, ffi)
-			getstriped_paths(path).each do |stripe| 
+			get_striped_paths(path).each do |stripe| 
 				stripe.open("a+") do |f| 
 					f.chmod(mode)
 				end #open and close the file by calling open with block
 			end
-		end
-
+		end	#	creat
+		
+		#	Write at offset in stripe
+		#	@param striped_paths [Array<String>]	array of striped paths
+		#	@param io [StringIO] write buffer
+		#	@param offset [Fixnum] offset in file
+		#	@param chunksize [Fixnum] chunksize
+		#	@param ffi [RFuse::FileInfo] stores file information such as file handle
+		#
+		#	@return [Fixnum] update offset
 		def stripe_write(striped_paths, io, offset, chunksize, ffi)
 			stripes_count = striped_paths.count
 			
 			# Find stripe number to begin writing
-			num_chunks_till_offset_in_file = offset/chunksize
-			num_stripe_at_offset = num_chunks_till_offset_in_file % stripes_count
+			chunks_till_offset_in_file = offset/chunksize
+			stripe_at_offset = chunks_till_offset_in_file % stripes_count
 			
 			size = io.length - io.tell
 
-			# Find offset in stripe to write at
+			# Calculate Offset in Stripe to write at
 			offset_in_chunk_in_stripe = offset % chunksize	#offset relative to a chunk 
-			num_chunk_till_offset_in_stripe = num_chunks_till_offset_in_file / stripes_count
-			offset_in_stripe = (num_chunk_till_offset_in_stripe * chunksize) + offset_in_chunk_in_stripe
+			chunk_till_offset_in_stripe = chunks_till_offset_in_file / stripes_count
+			offset_in_stripe = (chunk_till_offset_in_stripe * chunksize) + offset_in_chunk_in_stripe
 
-			# Calculate size to write at offset_in_stripe
+			# Calculate Size of data to write at offset in stripe
 			size_available_in_chunk = chunksize - offset_in_chunk_in_stripe
 			size_to_write_in_stripe = size > size_available_in_chunk ? size_available_in_chunk : size
 			
-			# write data of calcalated size at offset in stripe
-			::File.open(striped_paths[num_stripe_at_offset], "r+") do |file|
+			# Write data of calcalated size at offset in stripe
+			::File.open(striped_paths[stripe_at_offset], "r+") do |file|
 				file.seek(offset_in_stripe, 0)
 				offset += file.write(io.read(size_to_write_in_stripe))
 			end
+			# Return updated offset
 			offset
-		end
+		end	#	stripe_write
 
 =begin
 
@@ -301,7 +320,7 @@ module StripeFS
 		# @return [Fixnum] number of bytes written
 		def write(ctx, path, data, offset, ffi)
 			chunksize = @chunksize
-			striped_paths = getstriped_paths(path)
+			striped_paths = get_striped_paths(path)
 			offset_in_file = offset
 			io = StringIO.new(data)
 			size_of_buffer = io.length
@@ -312,32 +331,41 @@ module StripeFS
 			
 			length_written = offset_in_file - offset
 			length_written
-		end
-
+		end	#	write	
+		
+		#	Read at offset in stripe
+		#	@param striped_paths [Array<String>] array of striped paths
+		#	@param size [Fixnum] read size
+		#	@param offset [Fixnum] offset in file
+		#	@param chunksize [Fixnum] chunksize
+		#	@param read_length [Fixnum] number of bytes read
+		#	@param ffi [RFuse::FileInfo] stores file information such as file handle
+		#
+		# @return [String] read buffer
 		def stripe_read(striped_paths, size, offset, chunksize, read_length, ffi)
 			stripes_count = striped_paths.count
-			# Find which stripe to begin writing
-			num_chunks_till_offset_in_file = offset/chunksize
-			num_stripe_at_offset = num_chunks_till_offset_in_file % stripes_count
+			# Calculate Stripe number corresponding to offset in file
+			chunks_till_offset_in_file = offset/chunksize
+			stripe_at_offset = chunks_till_offset_in_file % stripes_count
 
 			size -= read_length
 			read_buffer = ""
-			# Find offset in stripe to write at
+			# Calculate Offset in Stripe to read at
 			offset_in_chunk_in_stripe = offset % chunksize	#offset relative to a chunk 
-			num_chunk_till_offset_in_stripe = num_chunks_till_offset_in_file / stripes_count
-			offset_in_stripe = (num_chunk_till_offset_in_stripe * chunksize) + offset_in_chunk_in_stripe
+			chunk_till_offset_in_stripe = chunks_till_offset_in_file / stripes_count
+			offset_in_stripe = (chunk_till_offset_in_stripe * chunksize) + offset_in_chunk_in_stripe
 
-			# Calculate size to write at offset_in_stripe
+			# Calculate Size of data to read at offset in stripe
 			size_to_read_in_chunk = chunksize - offset_in_chunk_in_stripe
 			size_to_read_in_stripe = size > size_to_read_in_chunk ? size_to_read_in_chunk : size
 			
-			# write data of calcalated size at offset in stripe
-			::File.open(striped_paths[num_stripe_at_offset], "r+") do |file|
+			# Read data of calcalated size at offset in stripe
+			::File.open(striped_paths[stripe_at_offset], "r+") do |file|
 				file.seek(offset_in_stripe, 0)
 				read_buffer = file.read(size_to_read_in_stripe)
 			end
 			read_buffer
-		end
+		end	#	stripe_read
 
 		# Fuse read file method. {RFuse::Fuse#read}
 		# @param ctx [RFuse::Context]
@@ -348,7 +376,7 @@ module StripeFS
 		# @return [String] containing read bytes
 		def read(ctx, path, size, offset, ffi)
 			chunksize = @chunksize
-			striped_paths = getstriped_paths(path)
+			striped_paths = get_striped_paths(path)
 			read_length = 0
 			buffer = ""
 			read_buffer = ""
@@ -363,21 +391,21 @@ module StripeFS
 				end	
 			end while (!read_buffer.nil? && read_length < size)
 			buffer
-		end
+		end	#	read
 		
 		# Fuse release method called once after #open. {RFuse::Fuse#release}
 		# @param ctx [RFuse::Context]
 		# @param path [String] object path
 		#	@param ffi [RFuse::FileInfo] stores file information such as file handle
 		def release(ctx, path, ffi) 
-		end
+		end	#	release
 		
 		# Fuse unlink method to delete file. {RFuse::Fuse#release}
 		# @param ctx [RFuse::Context]
 		# @param path [String] object path
 		def unlink(ctx, path)
-			getstriped_paths(path).each { |path| path.unlink }
-		end
+			get_striped_paths(path).each { |path| path.unlink }
+		end	#	unlink
 		
 		# Fuse utimens method to set file access and modification time. {RFuse::Fuse#utimens}
 		# @param ctx [RFuse::Context]
@@ -385,22 +413,25 @@ module StripeFS
 		# @param atime [Fixnum] access time
 		# @param mtime [Fixnum] modified time
 		def utimens(ctx, path, atime, mtime)
-			getstriped_paths(path).each { |path| path.utime(atime/1000000000, mtime/1000000000) }
-		end
+			get_striped_paths(path).each do |path| 
+				path.utime(atime/1000000000, mtime/1000000000)
+			end
+		end	#	utimens
 		
 		# Fuse truncate method. {RFuse::Fuse#truncate}
 		# @param ctx [RFuse::Context]
 		# @param path [String] object path
 		#	@param length [Fixnum] length to truncate 
 		def truncate(ctx, path, length)
-			striped_paths = getstriped_paths(path)
+			striped_paths = get_striped_paths(path)
 			stripes_count = striped_paths.count
 			chunksize = @chunksize
 			remaining_length = 0
 			bytes_to_skip = 0
 			stripe_final_size = []
 
-			# Initialize truncate size for each stripe path to multiple of chunksize for complete iteration
+			# Initialize truncate size for each stripe path to multiple 
+			#												of chunksize for complete iteration
 			(0..stripes_count-1).each_with_index do |index|
 				break if length > (chunksize * stripes_count)
 				stripe_final_size[index] = (length / (chunksize * stripes_count)) * chunksize
@@ -419,7 +450,7 @@ module StripeFS
 			striped_paths.each_with_index do |stripe, index|
 				stripe.truncate(stripe_final_size[index])
 			end
-		end
+		end	#	truncate
 
 		# Fuse ftruncate method. {RFuse::Fuse#ftruncate}
 		# @param ctx [RFuse::Context]
@@ -428,7 +459,7 @@ module StripeFS
 		#	@param ffi [RFuse::FileInfo] stores file information such as file handle
 		def ftruncate(ctx, path, length, ffi)
 			truncate(ctx, path, length)
-		end
+		end	#	ftruncate
 
-	end	# FS
-end	# StripeFS
+	end	#	FS
+end	#	StripeFS

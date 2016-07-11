@@ -9,25 +9,25 @@ require_relative 'stripefs/fs'
 module StripeFS
 	# Command line utility to mount StripeFS FileSystem
 	#
-	#	@author Mrinal Dhillon
 	#	@example
-	#		bin/stripefs /home/mrinal/splitfs -s /home/mrinal/clmnt/1 -s /home/mrinal/clmnt/2 
-	#																								-s /home/mrinal/clmnt/3 -c 4096	
+	#		StripeFS::CMD.mount(["/mnt/stripefs, "-s", "~/stripes/1", "-s", 
+	#									"~/stripes/2", "-s", "~/stripes/3", "-c" "4096"])
 	module CMD
 		extend self	
-		# Parse command line options
-		# @param [Array<String>] args command line arguments
+		# Parse options
+		# @param [Array<String>] command line arguments
 		# 
 		#	@return [Fixnum, Array<String>]	containing chunksize and stripe paths
+		# @note method is written to handle command line arguments ARGV.
 		def parse(args)
-			chunksize = 1024		#default chunksize is 1024
+			chunksize = 1024	#default chunksize is 1024
 			stripes = []
 
 			opt_parser = OptionParser.new do |opts|
-				opts.banner = "Usage: example.rb [options]"
+				opts.banner = "Usage: stripefs [options]"
 				opts.separator ""
 				opts.separator "Specific options:"
-				opts.on("-s", "--stripe String", String, "Single Stripe Path") { |str| stripes << str }
+				opts.on("-s", "--stripe String", String, "Stripe path") { |str| stripes << str }
 				opts.on("-c", "--chunksize N", Integer, "Chunksize") { |chk| chunksize = chk } 
 				opts.separator ""
 				opts.separator "Common options:"
@@ -42,16 +42,19 @@ module StripeFS
 			return chunksize, stripes
 		end
 
-		# Mount file system
-		def mount
+		# Mount StripeFS file system
+		#	@param argv [Array<String>] command line options
+		def mount(argv)
 			begin
-				chunksize,stripes = parse(ARGV)
+				chunksize,stripes = parse(argv)
 				
-				if Utils.is_blank?(stripes) || stripes.count <= 1 
+				if Utils.is_blank?(stripes) || stripes.count <= 1
+					parse(["-h"])
+					
 					fail ArgumentError, "Number of Stripe should be greater than 1"
 				end
 		
-				RFuse.main(ARGV) do |options, argv| 
+				RFuse.main(argv) do |options, args| 
 					FS.new(options[:mountpoint], stripes, chunksize)
 				end
 
@@ -60,5 +63,5 @@ module StripeFS
 				fail error
 			end
 		end
-	end	# CMD
-end #StripeFS
+	end # CMD
+end # StripeFS
