@@ -1,3 +1,4 @@
+#	OLD TODOS
 * Remove trailing / from argument paths
 * Validate paths and make sure that striping path is not same as mount path since it results in infinite loop
 * Implement #link, #symlink, #readlink, #getxattr, #setxattr, #listxattr, #access
@@ -6,3 +7,18 @@
 * Create files and folder under corresponding stripes excpet for 1st stripes only in case of a write.
 * Figure correct file access permissions.
 * Implement OSX support.
+
+#	NEXT Version
+* File system apis symlink, link, readlink, setxattr, getxattr, listxattr, mknod, access.
+* In-memory file handles will be maintained by StripeFS methods open, creat, read, write, release, ftruncate.
+* Disk space constraints should adhere to stripes’ aggregated capacity and individual space limits.
+
+#	DESIRED IN FUTURE
+*	Stripes should be accessed in parallel to achieve higher performance.
+*	Concurrent file access is not handled. StripeFS relies on properties of underlay file
+	systems. Further research is needed to support concurrent access.
+*	Ruby as the choice of language is used for fast prototyping and potability. C++ is
+	being considered for further development to achieve higher performance.
+*	Features such mirroring (RAID 1) [16][17], encryption are required to provide
+	added security and integrity of data through failures.
+*	macOS support require resolution of RFuse::Fuse incompatibility with osxfuse.

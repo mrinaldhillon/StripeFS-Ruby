@@ -1,1 +1,13 @@
-USAGE : ruby stripefs.rb /tmp/fuse -s /home/mrinal/clmnt/1 -s /home/mrinal/clmnt/2 -s /home/mrinal/clmnt/3 -c 1024
+#	USAGE: stripefs mountpoint -o fuse_options  -s stripe#1 -s stripe#2 ... -s stripe#n -c chunksize
+#
+#./bin/stripefs
+#Usage: stripefs [options]
+#
+#Specific options:
+#    -s, --stripe String              Stripe path
+#		 -c, --chunksize N                Chunksize
+
+#		Common options:
+#		-h, --help                       Show this message
+#
+#	bin/stripefs /mnt/stripefs -s ~/stripes/1 -s ~/stripes/2 -s ~/stripes/3 -c 4096
