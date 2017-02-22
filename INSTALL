@@ -1,0 +1,26 @@
+Ubuntu 16.04
+#INSTALL
+apt-get update
+apt-get install make ruby ruby-dev libfuse-dev
+gem install rfuse
+
+# Allow user to mount fuse with root permissions
+sudo addgroup <username> fuse
+
+#Create Folders
+# you may chose/create any empty folders.. following are just examples
+mkdir -p /home/<user>/clmnt/1
+mkdir -p /home/<user>/clmnt/2
+mkdir -p /home/<user>/clmnt/3
+# mountpoint at which application can access the stripefs filesystem.
+mkdir /tmp/fuse
+
+# Provide user to run the executable
+chmod +x bin/stripefs
+Run following command in terminal 
+bin/stripefs /tmp/fuse -s /home/dev/clmnt/1 -s /home/dev/clmnt/2 -s /home/dev/clmnt/3 -c 4096 &
+cd /tmp/fuse
+
+mount | grep fuse
+open the folder (/tmp/fuse) in file explorer on ubuntu desktop and perform operation such as copy, move, text editors etc.
+notice files being distributed under "clmnt" folder.

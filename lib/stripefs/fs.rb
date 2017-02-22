@@ -1,8 +1,3 @@
-#	StripeFS is a stackable striping file system.
-# Copyright (C) 2016  Mrinal Dhillon
-#	Read notices of GNU GPL at LICENCE.txt and GPL.txt 
-#	or visit <http://www.gnu.org/licenses/>.
-
 require 'rfuse'
 require 'pathname'
 require "stringio"

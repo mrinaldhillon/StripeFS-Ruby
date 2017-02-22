@@ -1,3 +1,13 @@
+Graduate Project at Sam Higginbottom Institute of Agriculture, Technology & Sciences, India towards partial completion of PG Diploma in Computer Application.
+
+Stackable Striping File System
+Graduate Project; Duration; Team        StripeFS; 2 months; 1 person 
+Language; Technologies                  Ruby; FUSE, NFS
+- Stackable file system provides file level striping across locally mounted filesystems such as ext3/4, NFS, Google GCS-Fuse, AWS S3FS.
+- Improves data security and provides storage space optimization.
+
+See INSTALL for setup.
+
 #	USAGE: stripefs mountpoint -o fuse_options  -s stripe#1 -s stripe#2 ... -s stripe#n -c chunksize
 #
 #./bin/stripefs
@@ -6,7 +16,7 @@
 #Specific options:
 #    -s, --stripe String              Stripe path
 #		 -c, --chunksize N                Chunksize
-
+#
 #		Common options:
 #		-h, --help                       Show this message
 #
